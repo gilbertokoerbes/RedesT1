@@ -79,6 +79,9 @@ def ip_protocol_verify(n_protocol):
     if(n_protocol == 1): protocol_name = 'ICMP'
     if(n_protocol == 6): protocol_name = 'TCP'
     if(n_protocol == 17): protocol_name = 'UDP'  
+    if (n_protocol == 58): protocol_name = 'ICMPv6'
+    if (n_protocol == 59): protocol_name = 'No next Header'
+
     return protocol_hex, protocol_name
     
     
@@ -118,14 +121,14 @@ def ipv4_header(data):
     print('>>..Destination IP = ', show_ip(target))
     protocol_rtn =ip_protocol_verify(proto)
     return protocol_rtn
-    
 
+    
+    
 def ipv6_header(data):
-    '''def ipv6Header(data, filter):
-    ipv6_first_word, ipv6_payload_legth, ipv6_next_header, ipv6_hoplimit = struct.unpack(
-        ">IHBB", data[0:8])
-    ipv6_src_ip = socket.inet_ntop(socket.AF_INET6, data[8:24])
-    ipv6_dst_ip = socket.inet_ntop(socket.AF_INET6, data[24:40])
+    parse_packet = data[14:] #para identificacao dos cabelhos do IPv4, ficara mais facil apos o parse a contagem comeca em 0
+    ipv6_first_word, ipv6_payload_legth, ipv6_next_header, ipv6_hoplimit = struct.unpack("!IHBB", parse_packet[0:8])
+    ipv6_src_ip = socket.inet_ntop(socket.AF_INET6, parse_packet[8:24])
+    ipv6_dst_ip = socket.inet_ntop(socket.AF_INET6, parse_packet[24:40])
 
     bin(ipv6_first_word)
     "{0:b}".format(ipv6_first_word)
@@ -134,15 +137,27 @@ def ipv6_header(data):
     traffic_class = int(traffic_class) & 4095
     flow_label = int(ipv6_first_word) & 65535
 
-    ipv6_next_header = nextHeader(ipv6_next_header)
+    #ipv6_next_header = nextHeader(ipv6_next_header)
     data = data[40:]
-
-    return data, ipv6_next_header'''
+    print(">>INTERNET PROTOCOL VERSION 6")
+    print(">>..Internet Protocol = ", version)
+    print(">>..Traffic Class = ", traffic_class)
+    print(">>..Flow Label = ", flow_label)
+    print(">>..Payload lengh = ", ipv6_payload_legth)
+    print(">>..Next Header= {}({})".format(ipv6_next_header, ip_protocol_verify(ipv6_next_header)))
+    print(">>..Hop Limit = ", ipv6_hoplimit)
+    print(">>..Source Address = ", ipv6_src_ip)
+    print(">>..Destination Address = ", ipv6_dst_ip)
+    
+    
+    
+    packets_percent['Ipv6'] += 1
+    return ip_protocol_verify(ipv6_next_header)
     '''parse_packet = data[14:] #para identificacao dos cabelhos do IP, ficara mais facil apos o parse a contagem comeca em 0
     version_header_length = parse_packet[0]
     version = version_header_length >> 4'''
 
-    packets_percent['Ipv6'] += 1
+    
     pass
     
     
@@ -156,8 +171,8 @@ def ip_head(protocol, data):
         encapsulated_protocol_ip = ipv4_header(data)
         return encapsulated_protocol_ip
     elif(protocol[1] == 'IPv6'):
-        ipv6_header(data)
-        return 'none'
+        encapsulated_protocol_ip = ipv6_header(data)
+        return encapsulated_protocol_ip
     else:
         return
 
@@ -169,9 +184,25 @@ def icmp_head(data):
     if(type_icmp==0): print('>>>... Echo: reply({})'.format(type_icmp))
     elif(type_icmp==8): print('>>>... Echo: request({})'.format(type_icmp))
     elif(type_icmp==3): print('>>>... Destination Unreachable({})'.format(type_icmp))
+    else: print('>>>... other type = ({})'.format(type_icmp))
+    
     print(">>>... Code = ", code)
     print(">>>... Checksum = ", raw_to_string(checksum))
     packets_percent['Icmp'] += 1
+    
+def icmpv6_head(data):
+    parse_packet = data[54:] #14 bytes ethernet + 40 bytes ipv6
+    type_icmp, code, checksum = struct.unpack('! B B 2s', parse_packet[0:4])
+    
+    print(">>>ICMPv6")
+    if(type_icmp==129): print('>>>... Echo: reply({})'.format(type_icmp))
+    elif(type_icmp==128): print('>>>... Echo: request({})'.format(type_icmp))
+    elif(type_icmp==1): print('>>>... Destination Unreachable({})'.format(type_icmp))
+    else: print('>>>... other type = ({})'.format(type_icmp))
+    
+    print(">>>... Code = ", code)
+    print(">>>... Checksum = ", raw_to_string(checksum))
+    packets_percent['Icmpv6'] += 1
     
 
 
@@ -233,6 +264,9 @@ def tcp_ip_layer(encapsulated_protocol_ip, raw_data):
     elif(encapsulated_protocol_ip[1] == 'ICMP'):
         icmp_head(raw_data)
         
+    elif(encapsulated_protocol_ip[1] == 'ICMPv6'):
+        icmpv6_head(raw_data)
+        
     elif(encapsulated_protocol_ip[1] == 'TCP'):
         protocol_application = tcp_head(raw_data)
         return protocol_application
@@ -255,11 +289,11 @@ def application_protocol_head(application_protocol, data):
 
         flag_byte1,flag_byte2  = struct.unpack('! s s ', parse_packet[2:4])
 
-        print(flag_byte1)
+        #print(flag_byte1)
         
         
         byte1_to_bit = str(bin(int(raw_to_string(flag_byte1), base=16))).lstrip('0b')
-        print(byte1_to_bit)
+        #print(byte1_to_bit)
         while len(byte1_to_bit) <8: byte1_to_bit='0'+byte1_to_bit  #preenchimento de a esquerda   
         
         qr = byte1_to_bit[0]
