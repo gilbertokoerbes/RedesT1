@@ -1,0 +1,9 @@
+Ethernet: 100.0%
+ARP: 4.0%
+IPv4: 78.0%
+IPv6: 18.0%
+ICMP: 0.0%
+ICMPv6: 0.0%
+UDP: 50.0%
+TCP: 20.0%
+DNS: 0.0%

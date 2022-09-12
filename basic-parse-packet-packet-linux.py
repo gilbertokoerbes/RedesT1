@@ -1,11 +1,17 @@
+from curses import raw
+from email.mime import application
 import struct
 import sys
 import socket
 import codecs
 
-global packets_percent
+global packets_percent 
+packets_percent = {'Ethernet': 0, 'Arp': 0, 'Ipv4': 0, 'Ipv6': 0, 'Icmp': 0, 'Icmpv6': 0, 'Udp': 0, 'Tcp': 0, 'Dns': 0}
+global total
+total = 0
 
 def ethernet_head(raw_data):
+    #ETHENET ++
  dest, src, prototype = struct.unpack('! 6s 6s H', raw_data[:14])
  
  #hex_mac_dest = codecs.encode(dest, 'hex')
@@ -21,6 +27,7 @@ def ethernet_head(raw_data):
  print('>...Destination:', show_mac(dest)) # exibe o mac formatado
  print('>...Source:     ',show_mac(src))
  print('>...Protocol:     {}({})'.format(protocol[0], protocol[1]))
+ packets_percent['Ethernet'] += 1
  return protocol
 
 def ethernet_protocol_verify(prototype):#retorna o tipo de protocolo
@@ -60,8 +67,9 @@ def ARP_packet(packet):
     print ('>>...sender ip', show_ip(sender_ip))
     print ('>>...target mac', show_mac(target_mac))
     print ('>>...target ip', show_ip(target_ip))
+    packets_percent['Arp'] += 1
     
-def raw_to_string(raw_info):# return input -> hex -> utf-8 -> string
+def raw_to_string(raw_info):# return transform input -> hex -> utf-8 -> string
     hex_info = codecs.encode(raw_info, 'hex')
     str_rtn = hex_info.decode('utf-8')
     return str_rtn
@@ -87,10 +95,10 @@ def ipv4_header(data):
     #ttl, proto, src, target = struct.unpack('! 8x B B 2x 4s 4s', parse_packet[:20])
     identification_raw, flags_and_fragment = struct.unpack('! 2s 2s', parse_packet[4:8])
     identification = raw_to_string(identification_raw)
-    flags = parse_packet[6]
+    #flags = parse_packet[6]
      
-    flags = ((flags >> 7), (flags >> 6), (flags >> 5))
-    
+    #flags = ((flags >> 7), (flags >> 6), (flags >> 5))
+    packets_percent['Ipv4'] += 1
     
     
     ttl, proto, src, target = struct.unpack('! B B 2x 4s 4s', parse_packet[8:20]) 
@@ -109,16 +117,34 @@ def ipv4_header(data):
     print('>>..Protocol = ', proto, ip_protocol_verify(proto))
     print('>>..Source IP = ', show_ip(src))
     print('>>..Destination IP = ', show_ip(target))
-    
-    return ip_protocol_verify(proto), data
+    protocol_rtn =ip_protocol_verify(proto)
+    return protocol_rtn
     
 
 def ipv6_header(data):
-    
-    parse_packet = data[14:] #para identificacao dos cabelhos do IP, ficara mais facil apos o parse a contagem comeca em 0
-    
+    '''def ipv6Header(data, filter):
+    ipv6_first_word, ipv6_payload_legth, ipv6_next_header, ipv6_hoplimit = struct.unpack(
+        ">IHBB", data[0:8])
+    ipv6_src_ip = socket.inet_ntop(socket.AF_INET6, data[8:24])
+    ipv6_dst_ip = socket.inet_ntop(socket.AF_INET6, data[24:40])
+
+    bin(ipv6_first_word)
+    "{0:b}".format(ipv6_first_word)
+    version = ipv6_first_word >> 28
+    traffic_class = ipv6_first_word >> 16
+    traffic_class = int(traffic_class) & 4095
+    flow_label = int(ipv6_first_word) & 65535
+
+    ipv6_next_header = nextHeader(ipv6_next_header)
+    data = data[40:]
+
+    return data, ipv6_next_header'''
+    '''parse_packet = data[14:] #para identificacao dos cabelhos do IP, ficara mais facil apos o parse a contagem comeca em 0
     version_header_length = parse_packet[0]
-    version = version_header_length >> 4
+    version = version_header_length >> 4'''
+
+    packets_percent['Ipv6'] += 1
+    pass
     
     
 def ip_head(protocol, data):
@@ -126,25 +152,132 @@ def ip_head(protocol, data):
         print("Failed to parse ProtocolType")
     elif(protocol[1] == 'ARP'):
         ARP_packet(data)
+        return 'none'
     elif(protocol[1] == 'IPv4'):
-        protocol, data = ipv4_header(data)
-        return protocol, data
+        encapsulated_protocol_ip = ipv4_header(data)
+        return encapsulated_protocol_ip
     elif(protocol[1] == 'IPv6'):
         ipv6_header(data)
+        return 'none'
+    else:
+        return
+
+def icmp_head(data):
+    parse_packet = data[34:]
+    type_icmp, code, checksum = struct.unpack('! B B 2s', parse_packet[0:4])
+    
+    print(">>>ICMP")
+    if(type_icmp==0): print('>>>... Echo: reply({})'.format(type_icmp))
+    elif(type_icmp==8): print('>>>... Echo: request({})'.format(type_icmp))
+    elif(type_icmp==3): print('>>>... Destination Unreachable({})'.format(type_icmp))
+    print(">>>... Code = ", code)
+    print(">>>... Checksum = ", raw_to_string(checksum))
+    packets_percent['Icmp'] += 1
+    
+
+
+def search_port_protocol_application(source_port, destination_port): #procura no dicionario os protocolos conhecidos com base nas portas
+    applications_ports = {53:'DNS', 80:'HTTP', 443:'HTTPS'}
+    application_rtn=''
+    if (source_port in applications_ports): application_rtn = applications_ports[source_port]
+    elif (destination_port in applications_ports): application_rtn = applications_ports[destination_port]
+    else: application_rtn='Application not detected'
+    return application_rtn    
+
+def tcp_head(data):
+    packets_percent['Tcp'] += 1
+    
+    parse_packet = data[34:]
+    source_port, destination_port= struct.unpack('! H H', parse_packet[0:4])
+    application = search_port_protocol_application(source_port, destination_port)
+    
+    seq_number, ack_number = struct.unpack('! 4s 4s', parse_packet[4:12])
+    window_tcp = struct.unpack('! H', parse_packet[14:16])
+    checksum, urgent_pointer = struct.unpack('! H H', parse_packet[16:20])
+    
+    print(">>>TCP:")
+    print(">>>... Source Port:", source_port)
+    print(">>>... Destination Port:", destination_port)
+    print(">>>... Sequence Number(raw):", int(raw_to_string(seq_number), base=16))
+    print(">>>... Acknowledgement Number(raw):", int(raw_to_string(ack_number), base=16))
+    print(">>>... Window:", window_tcp)
+    print(">>>... Checksum:", checksum)
+    print(">>>... Urgent Pointer:", urgent_pointer)
+    print(">>>... Application:", application)
+    
+    return application
+    
+    
+    pass
+def udp_head(data):
+    packets_percent['Udp'] += 1
+    parse_packet = data[34:]
+    source_port, destination_port, length, checksum = struct.unpack('! H H H 2s', parse_packet[0:8])
+    application = search_port_protocol_application(source_port, destination_port)
+    
+    print(">>>UDP:")
+    print(">>>... Source Port:", source_port)
+    print(">>>... Destination Port:", destination_port)
+    print(">>>... Length:", length)
+    print(">>>... Checksum:", raw_to_string(checksum))
+    print(">>>... Application:", application)
+    
+    return application
+    
+    pass
+
+def tcp_ip_layer(encapsulated_protocol_ip, raw_data):
+    
+    if(encapsulated_protocol_ip[1] == 'none'):
+        print("Failed to parse ProtocolType")
+        
+    elif(encapsulated_protocol_ip[1] == 'ICMP'):
+        icmp_head(raw_data)
+        
+    elif(encapsulated_protocol_ip[1] == 'TCP'):
+        protocol_application = tcp_head(raw_data)
+        return protocol_application
+    
+    elif(encapsulated_protocol_ip[1] == 'UDP'):
+        protocol_application = udp_head(raw_data)
+        return protocol_application    
+        
     else:
         return
         
-        
-        
+def calcula():
+    arq = open('estatistica.txt', 'w')
+    arq.write(f"Ethernet: {(packets_percent['Ethernet']/total)*100}%\n")
+    
+    arq.write(f"ARP: {(packets_percent['Arp']/total)*100}%\n")
+    arq.write(f"IPv4: {(packets_percent['Ipv4']/total)*100}%\n")
+    arq.write(f"IPv6: {(packets_percent['Ipv6']/total)*100}%\n")
+    arq.write(f"ICMP: {(packets_percent['Icmp']/total)*100}%\n")
+    arq.write(f"ICMPv6: {(packets_percent['Icmpv6']/total)*100}%\n")
+    arq.write(f"UDP: {(packets_percent['Udp']/total)*100}%\n")
+    arq.write(f"TCP: {(packets_percent['Tcp']/total)*100}%\n")
+    arq.write(f"DNS: {(packets_percent['Dns']/total)*100}%\n")
+    
+    pass  
+
         
     
 def main():
+    global total
+    total = 0
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
     while True:
      raw_data, addr = s.recvfrom(65535)
+     total += 1
+     #PACOTE TOTAL
      encapsulated_protocol_ethernet = ethernet_head(raw_data)
      encapsulated_protocol_ip = ip_head(encapsulated_protocol_ethernet, raw_data)
-     
+     application_protocol = tcp_ip_layer(encapsulated_protocol_ip, raw_data)
+     #funcao calcula estatisticas
+     calcula()
+     #open (w )
+     # % tipo =  tipo / totalpacotes * 100
+    
      
      print('===========================================================================')
      print('===========================================================================')
