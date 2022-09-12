@@ -281,7 +281,9 @@ def tcp_ip_layer(encapsulated_protocol_ip, raw_data):
 
 #DNS
 def application_protocol_head(application_protocol, data):
+    
     if (application_protocol == 'DNS'): #DNS Header format 16 bit per line (2 bytes)
+        packets_percent['Dns'] += 1
         parse_packet = data[42:]
         
         transaction_id= (struct.unpack('! 2s', parse_packet[0:2]))[0]
