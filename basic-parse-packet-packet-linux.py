@@ -1,5 +1,4 @@
-from curses import raw
-from email.mime import application
+
 import struct
 import sys
 import socket
@@ -245,6 +244,50 @@ def tcp_ip_layer(encapsulated_protocol_ip, raw_data):
     else:
         return
         
+
+#DNS
+def application_protocol_head(application_protocol, data):
+    if (application_protocol == 'DNS'): #DNS Header format 16 bit per line (2 bytes)
+        parse_packet = data[42:]
+        
+        transaction_id= (struct.unpack('! 2s', parse_packet[0:2]))[0]
+
+
+        flag_byte1,flag_byte2  = struct.unpack('! s s ', parse_packet[2:4])
+
+        print(flag_byte1)
+        
+        
+        byte1_to_bit = str(bin(int(raw_to_string(flag_byte1), base=16))).lstrip('0b')
+        print(byte1_to_bit)
+        while len(byte1_to_bit) <8: byte1_to_bit='0'+byte1_to_bit  #preenchimento de a esquerda   
+        
+        qr = byte1_to_bit[0]
+        opcode = byte1_to_bit[1:4]
+        aa = byte1_to_bit[5]
+        tc = byte1_to_bit[6]
+        rd = byte1_to_bit[7]
+        
+        byte2_to_bit = str(bin(int(raw_to_string(flag_byte2), base=16))).lstrip('0b')
+        while len(byte2_to_bit) <8: byte2_to_bit='0'+byte2_to_bit #preenchimento de a esquerda        
+        #print(byte2_to_bit)
+        ra = byte2_to_bit[0]
+        z = byte2_to_bit[1:4]
+        rcode =  byte2_to_bit[4:8]
+        
+
+        print(">>>>>DOMAIN NAME SYSTEM")
+        print(">>>>>.... Transaction ID = 0x{}".format(raw_to_string(transaction_id)))
+        print(">>>>>....QR = {} Query".format(qr)) if qr == '0' else print(">>>>>....QR = {} Response".format(qr))
+        print(">>>>>....Opcode = ", opcode)
+        print(">>>>>.....AA = {} ( Authoritative Answer)".format(aa))
+        print(">>>>>.......TC = {} ( TrunCation)".format(tc))
+        print(">>>>>.........RD = {} ( Recursion Desired)".format(rd))
+        print(">>>>>...........RA = {} ( Recursion Available)".format(ra))
+        print(">>>>>...........Reserved = {} (Z)".format(z))
+        print(">>>>>.....Response Code = {} ".format(rcode))
+        
+        
 def calcula():
     arq = open('estatistica.txt', 'w')
     arq.write(f"Ethernet: {(packets_percent['Ethernet']/total)*100}%\n")
@@ -259,8 +302,7 @@ def calcula():
     arq.write(f"DNS: {(packets_percent['Dns']/total)*100}%\n")
     
     pass  
-
-        
+          
     
 def main():
     global total
@@ -268,11 +310,14 @@ def main():
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
     while True:
      raw_data, addr = s.recvfrom(65535)
-     total += 1
      #PACOTE TOTAL
+     total += 1
+     
      encapsulated_protocol_ethernet = ethernet_head(raw_data)
      encapsulated_protocol_ip = ip_head(encapsulated_protocol_ethernet, raw_data)
      application_protocol = tcp_ip_layer(encapsulated_protocol_ip, raw_data)
+     application_protocol_head(application_protocol, raw_data)
+     
      #funcao calcula estatisticas
      calcula()
      #open (w )
