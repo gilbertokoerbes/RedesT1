@@ -207,7 +207,7 @@ def icmpv6_head(data):
 
 
 def search_port_protocol_application(source_port, destination_port): #procura no dicionario os protocolos conhecidos com base nas portas
-    applications_ports = {53:'DNS', 80:'HTTP', 443:'HTTPS'}
+    applications_ports = {53:'DNS', 80:'HTTP', 443:'HTTPS', 67: 'DHCPServer', 68: 'DHCPClient'}
     application_rtn=''
     if (source_port in applications_ports): application_rtn = applications_ports[source_port]
     elif (destination_port in applications_ports): application_rtn = applications_ports[destination_port]
